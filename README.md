@@ -57,12 +57,13 @@ docker run -p 8787:8787 \
   -e COUCHDB_USER=admin -e COUCHDB_PASSWORD=yourpassword \
   -e COUCHDB_DATABASE=obsidian -e VAULT_NAME=MyVault \
   -e COUCHDB_PASSPHRASE=your-encryption-passphrase \
+  -e COUCHDB_OBFUSCATE_PROPERTIES=false \
   -e MCP_AUTH_TOKEN=yourpassword \
   -e BASE_URL=https://your-server-url \
   ghcr.io/es617/obsidian-sync-mcp:latest
 ```
 
-Set `COUCHDB_PASSPHRASE` if you use E2E encryption in LiveSync. Set `BASE_URL` to your public URL (required for OAuth callbacks when agents connect over HTTPS).
+Set `COUCHDB_PASSPHRASE` if you use E2E encryption in LiveSync. Set `COUCHDB_OBFUSCATE_PROPERTIES=true` **only if** "Obfuscate Properties" is also enabled in your LiveSync settings — must match, or writes will silently fail to sync. Set `BASE_URL` to your public URL (required for OAuth callbacks when agents connect over HTTPS).
 
 Your MCP endpoint is `https://your-app.fly.dev/mcp` (Fly.io) or `https://your-server:8787/mcp` (Docker behind HTTPS).
 
@@ -164,11 +165,12 @@ COUCHDB_USER=admin \
 COUCHDB_PASSWORD=yourpassword \
 COUCHDB_DATABASE=obsidian \
 COUCHDB_PASSPHRASE=your-encryption-passphrase \
+COUCHDB_OBFUSCATE_PROPERTIES=false \
 VAULT_NAME=MyVault \
 npx obsidian-sync-mcp
 ```
 
-Omit `COUCHDB_PASSPHRASE` if you don't use E2E encryption in LiveSync.
+Omit `COUCHDB_PASSPHRASE` if you don't use E2E encryption in LiveSync. Set `COUCHDB_OBFUSCATE_PROPERTIES=true` **only if** "Obfuscate Properties" is also enabled in your LiveSync settings — must match, or writes will silently fail to sync.
 
 **Or with Docker:**
 
