@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.4
+
+### Fixes
+- Bump transitive deps (`fast-uri`, `hono`, `ip-address`, `qs`, `express-rate-limit`) to clear high-severity npm audit advisories (path traversal, host confusion). Refreshes the published Docker image with patched deps.
+
+### Docs
+- Surface `COUCHDB_OBFUSCATE_PROPERTIES` in quickstart snippets so encrypted-vault users don't silently fail to sync when "Obfuscate Properties" is enabled in LiveSync (#4)
+
 ## 0.5.3
 
 ### Features
