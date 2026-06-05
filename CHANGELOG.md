@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5
+
+### Features
+- New `MCP_INSTRUCTIONS` and `MCP_INSTRUCTIONS_FILE` env vars append vault-specific conventions (folder structure, naming rules, folders to avoid) to the server-side MCP `instructions` string, so they apply across every MCP client without per-client config. Append-only to preserve the built-in deep-link rendering rule; file wins if both are set. 32 KB cap on file size; missing/unreadable file is a fatal startup error.
+
 ## 0.5.4
 
 ### Fixes
