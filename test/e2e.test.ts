@@ -22,6 +22,7 @@ let server: ChildProcess;
 let vaultDir: string;
 let sessionId: string;
 let serverLogs: string;
+let lastInitResult: any = null;
 
 // --- Helpers ---
 
@@ -76,6 +77,7 @@ async function startServer(env: Record<string, string> = {}): Promise<void> {
             });
             if (resp.ok) {
                 sessionId = resp.headers.get("mcp-session-id") ?? "";
+                lastInitResult = parseSSE(await resp.text());
                 return;
             }
         } catch { /* not ready */ }
@@ -261,6 +263,34 @@ describe("E2E: READ_ONLY mode", () => {
         const resp = await mcpCall("tools/call", { name: "write_note", arguments: { path: "blocked.md", content: "x" } });
         assert.ok(resp?.error, "write_note call should return an error");
         assert.ok(!existsSync(join(vaultDir, "blocked.md")), "no file should be created when write is blocked");
+    });
+});
+
+describe("E2E: MCP_INSTRUCTIONS", () => {
+    it("appends env-var contents to the instructions string", async () => {
+        await stopServer();
+        await startServer({ VAULT_PATH: vaultDir, VAULT_NAME: "TestVault", MCP_INSTRUCTIONS: "inline-rule-XYZ" });
+        const instr: string = lastInitResult?.result?.instructions ?? "";
+        assert.ok(instr.includes("Access and manage an Obsidian vault"), "base instructions still present");
+        assert.ok(instr.includes("inline-rule-XYZ"), "inline env contents appended");
+    });
+
+    it("file wins when both MCP_INSTRUCTIONS and MCP_INSTRUCTIONS_FILE are set", async () => {
+        await stopServer();
+        const instructionsFile = join(vaultDir, "agent-rules.md");
+        await writeFile(instructionsFile, "file-rule-ABC\nfile-rule-DEF");
+        await startServer({
+            VAULT_PATH: vaultDir,
+            VAULT_NAME: "TestVault",
+            MCP_INSTRUCTIONS: "inline-rule-XYZ",
+            MCP_INSTRUCTIONS_FILE: instructionsFile,
+        });
+        const instr: string = lastInitResult?.result?.instructions ?? "";
+        assert.ok(instr.includes("Access and manage an Obsidian vault"), "base instructions still present");
+        assert.ok(instr.includes("file-rule-ABC"), "file contents appended");
+        assert.ok(instr.includes("file-rule-DEF"), "file contents appended (multiline)");
+        assert.ok(!instr.includes("inline-rule-XYZ"), "inline env ignored when file is set");
+        assert.ok(serverLogs.includes("ignoring MCP_INSTRUCTIONS env var"), "should warn about precedence");
     });
 });
 

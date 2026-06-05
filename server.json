@@ -100,6 +100,20 @@
           "format": "string",
           "isSecret": false,
           "name": "READ_ONLY"
+        },
+        {
+          "description": "Extra text appended to the MCP instructions string (the server-side system prompt). Use to bake vault-specific conventions (folder structure, naming rules, folders to avoid) so they apply across every MCP client.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "MCP_INSTRUCTIONS"
+        },
+        {
+          "description": "Path to a file whose contents are appended to the MCP instructions. Easier than MCP_INSTRUCTIONS for multi-line conventions. File wins if both are set.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "MCP_INSTRUCTIONS_FILE"
         }
       ]
     }

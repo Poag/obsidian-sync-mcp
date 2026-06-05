@@ -1,7 +1,7 @@
 import { FastMCP } from "fastmcp";
 import { join } from "path";
 import { timingSafeEqual, createHash } from "crypto";
-import { watch } from "fs";
+import { watch, readFileSync, statSync } from "fs";
 import { stat } from "fs/promises";
 import { setGlobalLogFunction, LEVEL_INFO } from "octagonal-wheels/common/logger";
 import { mountPasswordAuth } from "./auth.js";
@@ -33,6 +33,30 @@ const PORT = parseInt(process.env.PORT ?? "8787");
 const BASE_URL = process.env.BASE_URL ?? `http://localhost:${PORT}`;
 const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
 const READ_ONLY = process.env.READ_ONLY === "true";
+
+// Extra instructions appended to the MCP `instructions` string.
+// File wins if both are set (loud warning); missing file is fatal.
+const MCP_INSTRUCTIONS_FILE = process.env.MCP_INSTRUCTIONS_FILE?.trim() || undefined;
+const MCP_INSTRUCTIONS_ENV = process.env.MCP_INSTRUCTIONS?.trim() || undefined;
+let MCP_EXTRA_INSTRUCTIONS: string | undefined;
+const MCP_INSTRUCTIONS_MAX_BYTES = 32 * 1024;
+if (MCP_INSTRUCTIONS_FILE) {
+    try {
+        const size = statSync(MCP_INSTRUCTIONS_FILE).size;
+        if (size > MCP_INSTRUCTIONS_MAX_BYTES) {
+            throw new Error(`file is ${size} bytes, exceeds ${MCP_INSTRUCTIONS_MAX_BYTES} byte cap`);
+        }
+        MCP_EXTRA_INSTRUCTIONS = readFileSync(MCP_INSTRUCTIONS_FILE, "utf8").trim() || undefined;
+    } catch (err) {
+        console.error(`Failed to read MCP_INSTRUCTIONS_FILE (${MCP_INSTRUCTIONS_FILE}): ${(err as Error).message}`);
+        process.exit(1);
+    }
+    if (MCP_INSTRUCTIONS_ENV) {
+        console.warn("MCP_INSTRUCTIONS_FILE is set; ignoring MCP_INSTRUCTIONS env var.");
+    }
+} else if (MCP_INSTRUCTIONS_ENV) {
+    MCP_EXTRA_INSTRUCTIONS = MCP_INSTRUCTIONS_ENV;
+}
 
 // --- Initialize vault (local or remote) ---
 import type { VaultBackend } from "./vault-backend.js";
@@ -197,10 +221,11 @@ if (VAULT_PATH) {
 }
 
 // --- MCP Server ---
+const BASE_INSTRUCTIONS = "Access and manage an Obsidian vault. You can read, write, list, search, move, and delete markdown notes. Every tool response includes an Obsidian deep link. Always show this link to the user using the format [obsidian://open?vault=...&file=...](obsidian://open?vault=...&file=...) so it is both clickable and visible as a URL.";
 const serverOptions: ConstructorParameters<typeof FastMCP>[0] = {
     name: "obsidian-sync-mcp",
     version: process.env.npm_package_version ?? "0.0.0",
-    instructions: "Access and manage an Obsidian vault. You can read, write, list, search, move, and delete markdown notes. Every tool response includes an Obsidian deep link. Always show this link to the user using the format [obsidian://open?vault=...&file=...](obsidian://open?vault=...&file=...) so it is both clickable and visible as a URL.",
+    instructions: MCP_EXTRA_INSTRUCTIONS ? `${BASE_INSTRUCTIONS}\n\n${MCP_EXTRA_INSTRUCTIONS}` : BASE_INSTRUCTIONS,
 };
 
 // Auth
