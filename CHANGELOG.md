@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.6
+
+### Fixes
+- Empty (zero-byte) notes were dropped from the search index instead of being indexed, so a title-only note with no body never appeared in `list_notes` or search, and a fresh CouchDB vault of mostly empty notes cold-started with only the non-empty ones indexed. The index now distinguishes deleted notes from empty-but-present ones (#5, #6).
+- Bump transitive deps (`form-data`, `hono`, `undici`) to clear high-severity npm audit advisories (CRLF injection, CORS wildcard reflection).
+
 ## 0.5.5
 
 ### Features
