@@ -7,6 +7,7 @@ import { setGlobalLogFunction, LEVEL_INFO } from "octagonal-wheels/common/logger
 import { mountPasswordAuth } from "./auth.js";
 import { SearchIndex } from "./search.js";
 import { applyIndexChange } from "./index-sync.js";
+import { buildAllowedHosts, isHostAllowed, isOriginAllowed } from "./host-guard.js";
 import { registerTools } from "./tools.js";
 
 // Suppress livesync-commonlib logs that expose vault file paths in production.
@@ -243,11 +244,27 @@ if (AUTH_TOKEN) {
     };
     console.log("Auth enabled (password-gated OAuth).");
 } else {
+    // No token: enforce a Host-header allowlist so the "local only" precondition
+    // actually holds. Without this, DNS rebinding lets any website the operator
+    // visits reach the tool surface (CWE-350) even on a loopback bind, because
+    // the browser still sends the attacker's hostname in Host. Defaults to
+    // localhost; MCP_ALLOWED_HOSTS extends it for legit LAN/private-network use.
+    const allowedHosts = buildAllowedHosts(process.env.MCP_ALLOWED_HOSTS);
+    serverOptions.authenticate = async (req: import("http").IncomingMessage) => {
+        // Host check defeats DNS rebinding; Origin check defeats a direct
+        // cross-origin browser fetch to loopback (the transport sends wildcard CORS).
+        if (!isHostAllowed(req.headers["host"], allowedHosts)) {
+            throw new Response("Forbidden: Host not allowed", { status: 403 });
+        }
+        if (!isOriginAllowed(req.headers["origin"], allowedHosts)) {
+            throw new Response("Forbidden: cross-origin request rejected", { status: 403 });
+        }
+        return { authenticated: true };
+    };
+    console.log(`Auth disabled — accepting only local Host/Origin headers: ${[...allowedHosts].join(", ")}. Set MCP_ALLOWED_HOSTS to add hosts, or MCP_AUTH_TOKEN for authenticated remote access.`);
     const host = process.env.HOST ?? "0.0.0.0";
     if (host === "0.0.0.0") {
-        console.warn("WARNING: No authentication and listening on all interfaces. Set MCP_AUTH_TOKEN or HOST=127.0.0.1.");
-    } else {
-        console.log("Auth disabled (set MCP_AUTH_TOKEN to enable).");
+        console.warn("WARNING: No authentication and listening on all interfaces. Browser attacks (DNS rebinding and cross-origin fetch) are blocked by the Host/Origin checks, but any non-browser client that can reach this port has full vault access. Set MCP_AUTH_TOKEN, or HOST=127.0.0.1 to bind to loopback only.");
     }
 }
 

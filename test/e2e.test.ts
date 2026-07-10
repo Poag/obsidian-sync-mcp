@@ -9,6 +9,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { spawn, type ChildProcess } from "child_process";
 import { existsSync } from "fs";
+import { request as httpRequest } from "node:http";
 
 const PORT = 9877;
 const BASE = `http://localhost:${PORT}/mcp`;
@@ -325,5 +326,66 @@ describe("E2E: cold restart with persisted index", () => {
 
         // Deleted note should be gone
         assert.ok(!list.includes("projects/test.md"), "Deleted note should not appear");
+    });
+});
+
+// Runs last: replaces the shared auth server with a no-auth instance to exercise
+// the Host-header allowlist. Uses raw http.request because fetch() forbids
+// setting the Host header — which is exactly what a DNS-rebinding browser sends.
+describe("E2E: no-auth Host allowlist (DNS-rebinding)", () => {
+    function initializeWithHost(hostHeader: string, originHeader?: string): Promise<number> {
+        return new Promise((resolve, reject) => {
+            const body = JSON.stringify({
+                jsonrpc: "2.0", id: 1, method: "initialize",
+                params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "poc", version: "1.0" } },
+            });
+            const headers: Record<string, string | number> = {
+                "Host": hostHeader,
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+                "Content-Length": Buffer.byteLength(body),
+            };
+            if (originHeader) headers["Origin"] = originHeader;
+            const req = httpRequest(
+                { host: "127.0.0.1", port: PORT, path: "/mcp", method: "POST", headers },
+                (res) => { res.resume(); res.on("end", () => resolve(res.statusCode ?? 0)); },
+            );
+            req.on("error", reject);
+            req.end(body);
+        });
+    }
+
+    before(async () => {
+        await stopServer();
+        // Empty MCP_AUTH_TOKEN => no-auth mode, which enables the Host allowlist.
+        await startServer({ VAULT_PATH: vaultDir, VAULT_NAME: "TestVault", MCP_AUTH_TOKEN: "" });
+    });
+
+    it("rejects a forged (DNS-rebound) Host", async () => {
+        assert.equal(await initializeWithHost("attacker.example"), 403);
+    });
+
+    it("rejects userinfo/path smuggling in Host", async () => {
+        assert.equal(await initializeWithHost("attacker.example@127.0.0.1"), 403);
+    });
+
+    it("allows a genuine local Host", async () => {
+        assert.equal(await initializeWithHost(`127.0.0.1:${PORT}`), 200);
+    });
+
+    it("rejects a cross-origin browser request with a loopback Host (wildcard-CORS bypass)", async () => {
+        // The direct fetch('http://127.0.0.1/mcp') attack: real Host, attacker Origin.
+        assert.equal(await initializeWithHost(`127.0.0.1:${PORT}`, "http://attacker.example"), 403);
+    });
+
+    it("allows a local browser Origin (e.g. MCP Inspector on localhost)", async () => {
+        assert.equal(await initializeWithHost(`127.0.0.1:${PORT}`, `http://localhost:${PORT}`), 200);
+    });
+
+    it("honors MCP_ALLOWED_HOSTS", async () => {
+        await stopServer();
+        await startServer({ VAULT_PATH: vaultDir, VAULT_NAME: "TestVault", MCP_AUTH_TOKEN: "", MCP_ALLOWED_HOSTS: "myhost.local" });
+        assert.equal(await initializeWithHost("myhost.local"), 200);
+        assert.equal(await initializeWithHost("attacker.example"), 403);
     });
 });
