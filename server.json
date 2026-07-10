@@ -6,12 +6,12 @@
     "url": "https://github.com/es617/obsidian-sync-mcp.git",
     "source": "github"
   },
-  "version": "0.5.6",
+  "version": "0.5.7",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "obsidian-sync-mcp",
-      "version": "0.5.6",
+      "version": "0.5.7",
       "transport": {
         "type": "streamable-http",
         "url": "http://localhost:8787/mcp"
@@ -79,6 +79,13 @@
           "format": "string",
           "isSecret": true,
           "name": "MCP_AUTH_TOKEN"
+        },
+        {
+          "description": "Comma-separated extra Host/Origin values accepted in no-auth mode (e.g. '192.168.1.5,mybox.local'). Localhost is always allowed; ignored when MCP_AUTH_TOKEN is set.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "MCP_ALLOWED_HOSTS"
         },
         {
           "description": "Public URL for OAuth callbacks (required when using a tunnel)",

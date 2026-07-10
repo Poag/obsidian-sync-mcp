@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.7
+
+### Security
+- Fix unauthenticated vault access via DNS rebinding and cross-origin browser requests when running without `MCP_AUTH_TOKEN` (GHSA-mx6p-3fg7-v6pj, CWE-350). In no-auth mode the MCP endpoint now validates the `Host` and `Origin` headers and rejects any request not from `localhost`/`127.0.0.1`/`::1` (extend with `MCP_ALLOWED_HOSTS`). Previously, a malicious web page the operator visited could reach the full tool surface — reading and modifying the vault — with no credential. Deployments that set `MCP_AUTH_TOKEN` were not affected. Reported by @eitanch228.
+
 ## 0.5.6
 
 ### Fixes
