@@ -6,12 +6,12 @@
     "url": "https://github.com/es617/obsidian-sync-mcp.git",
     "source": "github"
   },
-  "version": "0.5.7",
+  "version": "0.5.8",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "obsidian-sync-mcp",
-      "version": "0.5.7",
+      "version": "0.5.8",
       "transport": {
         "type": "streamable-http",
         "url": "http://localhost:8787/mcp"
@@ -60,7 +60,7 @@
           "name": "COUCHDB_PASSPHRASE"
         },
         {
-          "description": "Set to 'true' if 'Obfuscate Properties' is enabled in LiveSync (obfuscates file paths, sizes, dates)",
+          "description": "Set to 'true' if 'Obfuscate Properties' is enabled in LiveSync (obfuscates file paths, sizes, dates). Auto-detected from existing vaults at startup; only decides the format for a brand-new empty database",
           "isRequired": false,
           "format": "string",
           "isSecret": false,

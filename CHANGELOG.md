@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.8
+
+### Features
+- Auto-detect LiveSync's "Obfuscate Properties" setting from the vault's document IDs at startup. A `COUCHDB_OBFUSCATE_PROPERTIES` value that doesn't match the vault could never work — `list_notes` and search would succeed while `read_note` returned "Note not found" for every path and writes produced documents LiveSync clients ignore (#4, #10). On mismatch the server now warns and corrects the setting automatically; an obfuscated vault without `COUCHDB_PASSPHRASE` fails fast at startup with a clear error instead of starting broken. The configured value now only matters for a brand-new empty database, where there is nothing to detect.
+
+### Tests
+- New CouchDB-mode e2e harness (`npm run test:couchdb`) seeds obfuscated and plain vaults through the livesync-commonlib write path and verifies detection, auto-correction, and the fail-fast — runs in CI against a real CouchDB service container, the first CI coverage of CouchDB mode.
+
 ## 0.5.7
 
 ### Security
