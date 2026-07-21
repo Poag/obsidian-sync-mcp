@@ -93,7 +93,7 @@ jobs:
           COUCHDB_USER: admin
           COUCHDB_PASSWORD: test
         options: >-
-          --health-cmd "curl -sf http://localhost:5984/up"
+          --health-cmd "curl -sf http://localhost:5984/"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
