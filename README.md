@@ -63,7 +63,7 @@ docker run -p 8787:8787 \
   ghcr.io/es617/obsidian-sync-mcp:latest
 ```
 
-Set `COUCHDB_PASSPHRASE` if you use E2E encryption in LiveSync. Set `COUCHDB_OBFUSCATE_PROPERTIES=true` **only if** "Obfuscate Properties" is also enabled in your LiveSync settings — must match, or writes will silently fail to sync. Set `BASE_URL` to your public URL (required for OAuth callbacks when agents connect over HTTPS).
+Set `COUCHDB_PASSPHRASE` if you use E2E encryption in LiveSync. Set `COUCHDB_OBFUSCATE_PROPERTIES=true` if "Obfuscate Properties" is also enabled in your LiveSync settings. For an existing vault the server detects the actual setting from the database at startup and corrects a mismatch with a warning; only for a brand-new empty database does the value need to match your LiveSync settings. Set `BASE_URL` to your public URL (required for OAuth callbacks when agents connect over HTTPS).
 
 Your MCP endpoint is `https://your-app.fly.dev/mcp` (Fly.io) or `https://your-server:8787/mcp` (Docker behind HTTPS).
 
@@ -170,7 +170,7 @@ VAULT_NAME=MyVault \
 npx obsidian-sync-mcp
 ```
 
-Omit `COUCHDB_PASSPHRASE` if you don't use E2E encryption in LiveSync. Set `COUCHDB_OBFUSCATE_PROPERTIES=true` **only if** "Obfuscate Properties" is also enabled in your LiveSync settings — must match, or writes will silently fail to sync.
+Omit `COUCHDB_PASSPHRASE` if you don't use E2E encryption in LiveSync. Set `COUCHDB_OBFUSCATE_PROPERTIES=true` if "Obfuscate Properties" is also enabled in your LiveSync settings. For an existing vault the server detects the actual setting from the database at startup and corrects a mismatch with a warning; only for a brand-new empty database does the value need to match your LiveSync settings.
 
 **Or with Docker:**
 
@@ -248,7 +248,7 @@ Without `MCP_AUTH_TOKEN`, the server runs without authentication — suitable fo
 | `COUCHDB_PASSWORD` | CouchDB mode | — | CouchDB password (required) |
 | `COUCHDB_DATABASE` | CouchDB mode | `obsidian` | CouchDB database name |
 | `COUCHDB_PASSPHRASE` | CouchDB mode | — | LiveSync E2E encryption passphrase (must match plugin setting) |
-| `COUCHDB_OBFUSCATE_PROPERTIES` | CouchDB mode | `false` | Set to `true` if "Obfuscate Properties" is enabled in LiveSync (obfuscates file paths, sizes, dates in the database) |
+| `COUCHDB_OBFUSCATE_PROPERTIES` | CouchDB mode | `false` | Set to `true` if "Obfuscate Properties" is enabled in LiveSync (obfuscates file paths, sizes, dates in the database). For existing vaults the actual setting is auto-detected at startup; this value only decides the format for a brand-new empty database |
 | `VAULT_NAME` | Both | `MyVault` | Vault name (used for deep links and index storage) |
 | `MCP_AUTH_TOKEN` | Optional | — | Password for authentication |
 | `BASE_URL` | Optional | `http://localhost:PORT` | Public URL (for OAuth callbacks when using a tunnel) |

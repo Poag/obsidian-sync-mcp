@@ -12,6 +12,7 @@ import { clearHandlers } from "../lib/livesync-commonlib/src/replication/SyncPar
 import { parseFrontmatterAndLinks } from "./parse.js";
 import type { VaultBackend, NoteInfo, NoteListing } from "./vault-backend.js";
 import { deriveContent } from "./index-sync.js";
+import { classifyIds, type IdFormat } from "./id-format.js";
 
 export interface VaultConfig {
     couchdbUrl: string;
@@ -25,26 +26,97 @@ export interface VaultConfig {
 export class Vault implements VaultBackend {
     private manipulator: DirectFileManipulator;
     private passphrase: string | undefined;
+    private config: VaultConfig;
 
     constructor(config: VaultConfig) {
+        this.config = config;
         this.passphrase = config.passphrase;
-        const opts: DirectFileManipulatorOptions = {
+        this.manipulator = new DirectFileManipulator(Vault.buildOptions(config, !!config.obfuscatePaths));
+    }
+
+    private static buildOptions(config: VaultConfig, obfuscatePaths: boolean): DirectFileManipulatorOptions {
+        return {
             url: config.couchdbUrl,
             username: config.couchdbUser,
             password: config.couchdbPassword,
             database: config.database,
             passphrase: config.passphrase,
-            obfuscatePassphrase: config.obfuscatePaths ? config.passphrase : undefined,
+            obfuscatePassphrase: obfuscatePaths ? config.passphrase : undefined,
             useEden: false,
             enableCompression: false,
             handleFilenameCaseSensitive: false,
             doNotUseFixedRevisionForChunks: false,
         };
-        this.manipulator = new DirectFileManipulator(opts);
     }
 
     async init(): Promise<void> {
         await this.manipulator.ready.promise;
+        await this.reconcileObfuscation();
+    }
+
+    /**
+     * Detect whether the vault's document IDs are obfuscated and, if the
+     * configured COUCHDB_OBFUSCATE_PROPERTIES doesn't match, correct it.
+     * A mismatched setting can never work: path→id resolution misses every
+     * existing note on read, and writes produce docs LiveSync clients ignore
+     * (issues #4, #10). The database is the ground truth.
+     */
+    private async reconcileObfuscation(): Promise<void> {
+        const configured = !!this.config.obfuscatePaths;
+        const format = await this.detectIdFormat();
+        if (format === "empty") return;
+        if (format === "mixed") {
+            console.warn(
+                "Warning: vault contains both obfuscated and plaintext document IDs. " +
+                `Keeping COUCHDB_OBFUSCATE_PROPERTIES=${configured}. ` +
+                "This usually means \"Obfuscate properties\" was toggled without rebuilding the database — consider rebuilding it from LiveSync.",
+            );
+            return;
+        }
+        const actual = format === "obfuscated";
+        if (actual === configured) return;
+        if (actual && !this.passphrase) {
+            throw new Error(
+                "Vault uses obfuscated document IDs (LiveSync \"Obfuscate properties\"), which requires the E2E passphrase. " +
+                "Set COUCHDB_PASSPHRASE and COUCHDB_OBFUSCATE_PROPERTIES=true.",
+            );
+        }
+        console.warn(
+            actual
+                ? "Warning: vault uses obfuscated document IDs but COUCHDB_OBFUSCATE_PROPERTIES is not set to true. " +
+                  "Enabling path obfuscation automatically — set COUCHDB_OBFUSCATE_PROPERTIES=true to silence this warning."
+                : "Warning: COUCHDB_OBFUSCATE_PROPERTIES=true but vault uses plaintext document IDs. " +
+                  "Disabling path obfuscation automatically — set COUCHDB_OBFUSCATE_PROPERTIES=false to silence this warning.",
+        );
+        await this.manipulator.close();
+        this.manipulator = new DirectFileManipulator(Vault.buildOptions(this.config, actual));
+        await this.manipulator.ready.promise;
+    }
+
+    /** Sample file-entry docs from the changes feed and classify their IDs. */
+    private async detectIdFormat(): Promise<IdFormat> {
+        const SAMPLE_TARGET = 20;
+        const BATCH_SIZE = 100;
+        const db = this.manipulator.liveSyncLocalDB.localDatabase;
+        const ids: string[] = [];
+        let since: string | number = 0;
+
+        while (ids.length < SAMPLE_TARGET) {
+            const result = await db.changes({
+                since,
+                limit: BATCH_SIZE,
+                // Only real file entries — excludes chunks, versioninfo, milestones, sync params.
+                selector: { type: { $in: ["plain", "newnote"] } },
+                live: false,
+            });
+            for (const change of result.results) {
+                if (ids.length >= SAMPLE_TARGET) break;
+                ids.push(change.id);
+            }
+            if (result.results.length < BATCH_SIZE) break;
+            since = result.last_seq;
+        }
+        return classifyIds(ids);
     }
 
     async close(): Promise<void> {
