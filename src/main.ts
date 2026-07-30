@@ -9,6 +9,7 @@ import { SearchIndex } from "./search.js";
 import { applyIndexChange } from "./index-sync.js";
 import { buildAllowedHosts, isHostAllowed, isOriginAllowed } from "./host-guard.js";
 import { registerTools } from "./tools.js";
+import { parseWriteFolders } from "./write-scope.js";
 
 // Suppress livesync-commonlib logs that expose vault file paths in production.
 // Set LOG_LEVEL=debug to see all library logs during development.
@@ -35,6 +36,7 @@ const PORT = parseInt(process.env.PORT ?? "8787");
 const BASE_URL = process.env.BASE_URL ?? `http://localhost:${PORT}`;
 const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
 const READ_ONLY = process.env.READ_ONLY === "true";
+const WRITE_FOLDERS = parseWriteFolders(process.env.WRITE_FOLDERS);
 
 // Extra instructions appended to the MCP `instructions` string.
 // File wins if both are set (loud warning); missing file is fatal.
@@ -277,7 +279,7 @@ if (AUTH_TOKEN) {
 }
 
 // --- Tools ---
-registerTools(server, vault, searchIndex, VAULT_NAME, READ_ONLY);
+registerTools(server, vault, searchIndex, VAULT_NAME, READ_ONLY, WRITE_FOLDERS);
 
 // --- Graceful shutdown ---
 async function shutdown() {

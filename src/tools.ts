@@ -3,6 +3,7 @@ import { z } from "zod";
 import { makeDeepLink } from "./deeplink.js";
 import type { VaultBackend } from "./vault-backend.js";
 import type { SearchIndex } from "./search.js";
+import { isPathWritable } from "./write-scope.js";
 
 const debugLogging = process.env.LOG_LEVEL === "debug";
 
@@ -14,10 +15,18 @@ export function registerTools(
     searchIndex: SearchIndex,
     vaultName: string,
     readOnly = false,
+    writeFolders: string[] | null = null,
 ) {
     if (readOnly) {
         console.log(`READ_ONLY mode: write tools disabled (${WRITE_TOOLS.join(", ")}).`);
+    } else if (writeFolders) {
+        console.log(`WRITE_FOLDERS: writes restricted to ${writeFolders.map((f) => f + "/").join(", ")}.`);
     }
+    const writeScopeNote = writeFolders
+        ? ` Writes are only allowed inside: ${writeFolders.map((f) => f + "/").join(", ")}.`
+        : "";
+    const denyWrite = (path: string) =>
+        `Write access denied: '${path}' is outside the writable folders (${writeFolders!.map((f) => f + "/").join(", ")}).`;
     const _addTool = server.addTool.bind(server);
     server.addTool = (tool: any) => {
         const original = tool.execute;
@@ -50,12 +59,13 @@ export function registerTools(
     if (!readOnly) server.addTool({
         name: "write_note",
         description:
-            "Write or update a note in the Obsidian vault. Creates the note if it doesn't exist. Replaces the entire content if it does — read first if you need to preserve existing content.",
+            "Write or update a note in the Obsidian vault. Creates the note if it doesn't exist. Replaces the entire content if it does — read first if you need to preserve existing content." + writeScopeNote,
         parameters: z.object({
             path: z.string().describe("Vault-relative path to the note, e.g. 'daily/2026-03-23.md'"),
             content: z.string().describe("Full markdown content for the note"),
         }),
         execute: async ({ path, content }) => {
+            if (!isPathWritable(path, writeFolders)) return denyWrite(path);
             const ok = await vault.writeNote(path, content);
             if (!ok) {
                 return `Failed to write note: ${path}`;
@@ -187,7 +197,7 @@ export function registerTools(
     if (!readOnly) server.addTool({
         name: "edit_note",
         description:
-            "Edit a note without rewriting it. Use 'append' (default) to add content to the end, 'prepend' to add after frontmatter, or 'replace' to swap old_text with new content. For replace, the old_text must match exactly once.",
+            "Edit a note without rewriting it. Use 'append' (default) to add content to the end, 'prepend' to add after frontmatter, or 'replace' to swap old_text with new content. For replace, the old_text must match exactly once." + writeScopeNote,
         parameters: z.object({
             path: z.string().describe("Vault-relative path to the note, e.g. 'daily/2026-03-25.md'"),
             content: z.string().describe("Text to append, prepend, or use as replacement for old_text"),
@@ -201,6 +211,7 @@ export function registerTools(
                 .describe("Required for replace operation. Exact text to find and replace. Must match exactly once."),
         }),
         execute: async ({ path, content: newContent, operation, old_text }) => {
+            if (!isPathWritable(path, writeFolders)) return denyWrite(path);
             const existing = await vault.readNote(path);
             if (existing === null) {
                 return `Note not found: ${path}`;
@@ -247,11 +258,12 @@ export function registerTools(
 
     if (!readOnly) server.addTool({
         name: "delete_note",
-        description: "Delete a note from the Obsidian vault.",
+        description: "Delete a note from the Obsidian vault." + writeScopeNote,
         parameters: z.object({
             path: z.string().describe("Vault-relative path to the note to delete"),
         }),
         execute: async ({ path }) => {
+            if (!isPathWritable(path, writeFolders)) return denyWrite(path);
             const ok = await vault.deleteNote(path);
             if (ok) searchIndex.remove(path);
             return ok ? `Deleted: ${path}` : `Failed to delete: ${path}`;
@@ -261,12 +273,15 @@ export function registerTools(
     if (!readOnly) server.addTool({
         name: "move_note",
         description:
-            "Move or rename a note. Use this to rename a note within the same folder, move it to a different folder, or both at once. Creates destination folders automatically.",
+            "Move or rename a note. Use this to rename a note within the same folder, move it to a different folder, or both at once. Creates destination folders automatically." + writeScopeNote,
         parameters: z.object({
             from: z.string().describe("Current path, e.g. 'daily/old-name.md'"),
             to: z.string().describe("New path, e.g. 'projects/new-name.md'"),
         }),
         execute: async ({ from, to }) => {
+            // Moving out of a folder deletes there; moving in writes there — both ends must be writable.
+            if (!isPathWritable(from, writeFolders)) return denyWrite(from);
+            if (!isPathWritable(to, writeFolders)) return denyWrite(to);
             const content = await vault.readNote(from);
             const ok = await vault.moveNote(from, to);
             if (!ok) {
