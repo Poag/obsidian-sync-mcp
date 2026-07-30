@@ -308,6 +308,13 @@ describe("E2E: cold restart with persisted index", () => {
 
         // Restart server
         await startServer({ VAULT_PATH: vaultDir, VAULT_NAME: "TestVault" });
+
+        // The server accepts connections while the index rebuild runs in the
+        // background — wait for the rebuild to finish before asserting.
+        const deadline = Date.now() + 5000;
+        while (Date.now() < deadline && !serverLogs.includes("Search index built")) {
+            await new Promise((r) => setTimeout(r, 50));
+        }
         const restartLogs = serverLogs;
 
         // Should rebuild search index from vault files
