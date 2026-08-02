@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.1
+
+### Changes
+- Switch the vendored livesync-commonlib to upstream main (0.1.1): the enumerate-metaonly fix is now merged upstream (vrtmrz/livesync-commonlib#22), so the fork pin is retired. Also picks up upstream's trailing-slash `couchDB_URI` fix (avoids double-slash 401s against CouchDB) and `DirectFileManipulator` path/watch-semantics fixes.
+
+## 0.6.0
+
+### Features
+- New `WRITE_FOLDERS` env var grants write access per-folder instead of all-or-nothing (#11). The whole vault stays readable, but `write_note`, `edit_note`, `delete_note`, and `move_note` refuse paths outside the listed folders (`move_note` requires both source and destination to be writable). Enforced server-side, so it holds regardless of whether the AI client respects instructions. `READ_ONLY=true` still disables write tools entirely; unset keeps full-write behavior.
+
+### Fixes
+- Bump deps to clear high-severity npm audit advisories: `brace-expansion` DoS (via minimatch 10) and `fast-uri` host confusion. Also picks up `@hono/node-server` 2.x and `@modelcontextprotocol/sdk` 1.30.
+
 ## 0.5.8
 
 ### Features
