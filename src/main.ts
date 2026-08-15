@@ -242,7 +242,12 @@ if (AUTH_TOKEN) {
         if (auth?.validateToken(header)) {
             return { authenticated: true };
         }
-        throw new Response("Unauthorized", { status: 401 });
+        // RFC 9728: point strict clients (e.g. Gemini) at the resource
+        // metadata; Claude probes /.well-known directly but others rely on this.
+        throw new Response("Unauthorized", {
+            status: 401,
+            headers: { "WWW-Authenticate": `Bearer resource_metadata="${BASE_URL}/.well-known/oauth-protected-resource"` },
+        });
     };
     console.log("Auth enabled (password-gated OAuth).");
 } else {

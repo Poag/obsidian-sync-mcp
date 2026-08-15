@@ -41,6 +41,7 @@ interface RegisteredClient {
     clientSecret: string;
     redirectUris: string[];
     clientName?: string;
+    createdAt?: number;
 }
 
 const TOKEN_EXPIRY_MS = 3600 * 1000; // 1 hour
@@ -82,6 +83,28 @@ export function mountPasswordAuth(app: Hono, baseUrl: string, password: string, 
     let lockoutCount = 0;
     let lockedUntil = 0;
 
+    // Persist clients + tokens. Called on every state change (not just the
+    // periodic save): a restart or Fly suspend right after registration or
+    // token issuance must not lose the new state.
+    async function persist(): Promise<void> {
+        if (!persistPath) return;
+        try {
+            await mkdir(dirname(persistPath), { recursive: true });
+            const now = Date.now();
+            const activeTokens = [...tokens.entries()].filter(([_, r]) => r.expiresAt > now);
+            const activeRefresh = [...refreshTokens.entries()].filter(([_, r]) => r.refreshExpiresAt > now);
+            const data = JSON.stringify({
+                tokens: Object.fromEntries(activeTokens),
+                refreshTokens: Object.fromEntries(activeRefresh),
+                clients: Object.fromEntries(clients),
+            });
+            await writeFile(persistPath, data, { encoding: "utf-8", mode: 0o600 });
+            await chmod(persistPath, 0o600);
+        } catch (err) {
+            console.error("Failed to save auth tokens:", err);
+        }
+    }
+
     // HTTPS warning
     if (!baseUrl.startsWith("https://") && !baseUrl.includes("localhost")) {
         console.warn("WARNING: BASE_URL is not HTTPS. OAuth tokens will be sent in cleartext. Use a tunnel (cloudflared, tailscale, ngrok) to provide TLS.");
@@ -115,7 +138,20 @@ export function mountPasswordAuth(app: Hono, baseUrl: string, password: string, 
 
     app.post("/oauth/register", async (c) => {
         if (clients.size >= MAX_CLIENTS) {
-            return c.json({ error: "too_many_clients" }, 429);
+            // Evict the oldest client with no live tokens to make room; only
+            // reject when every slot is held by a client with active tokens.
+            const activeClientIds = new Set<string>();
+            for (const r of tokens.values()) activeClientIds.add(r.clientId);
+            for (const r of refreshTokens.values()) activeClientIds.add(r.clientId);
+            let oldest: RegisteredClient | undefined;
+            for (const client of clients.values()) {
+                if (activeClientIds.has(client.clientId)) continue;
+                if (!oldest || (client.createdAt ?? 0) < (oldest.createdAt ?? 0)) oldest = client;
+            }
+            if (!oldest) {
+                return c.json({ error: "too_many_clients" }, 429);
+            }
+            clients.delete(oldest.clientId);
         }
         const body = await c.req.json();
 
@@ -142,8 +178,10 @@ export function mountPasswordAuth(app: Hono, baseUrl: string, password: string, 
             clientSecret,
             redirectUris,
             clientName,
+            createdAt: Date.now(),
         };
         clients.set(clientId, client);
+        await persist();
 
         return c.json({
             client_id: clientId,
@@ -315,6 +353,7 @@ export function mountPasswordAuth(app: Hono, baseUrl: string, password: string, 
             };
             tokens.set(accessToken, record);
             refreshTokens.set(refreshToken, record);
+            await persist();
 
             return c.json({
                 access_token: accessToken,
@@ -353,6 +392,7 @@ export function mountPasswordAuth(app: Hono, baseUrl: string, password: string, 
             };
             tokens.set(accessToken, record);
             refreshTokens.set(newRefreshToken, record);
+            await persist();
 
             return c.json({
                 access_token: accessToken,
@@ -379,36 +419,18 @@ export function mountPasswordAuth(app: Hono, baseUrl: string, password: string, 
         },
 
         async saveTokens(): Promise<void> {
-            if (!persistPath) return;
-            try {
-                await mkdir(dirname(persistPath), { recursive: true });
-                const now = Date.now();
-                const activeTokens = [...tokens.entries()].filter(([_, r]) => r.expiresAt > now);
-                const activeRefresh = [...refreshTokens.entries()].filter(([_, r]) => r.refreshExpiresAt > now);
-                const data = JSON.stringify({
-                    tokens: Object.fromEntries(activeTokens),
-                    refreshTokens: Object.fromEntries(activeRefresh),
-                    clients: Object.fromEntries(clients),
-                });
-                await writeFile(persistPath, data, { encoding: "utf-8", mode: 0o600 });
-                await chmod(persistPath, 0o600);
-                console.log(`Auth tokens saved to disk (${tokens.size} sessions).`);
-            } catch (err) {
-                console.error("Failed to save auth tokens:", err);
-            }
+            await persist();
         },
 
         cleanup(): void {
             const now = Date.now();
             for (const [k, r] of tokens) { if (r.expiresAt <= now) tokens.delete(k); }
             for (const [k, r] of refreshTokens) { if (r.refreshExpiresAt <= now) refreshTokens.delete(k); }
-            // Evict clients with no active tokens or refresh tokens
-            const activeClientIds = new Set<string>();
-            for (const r of tokens.values()) activeClientIds.add(r.clientId);
-            for (const r of refreshTokens.values()) activeClientIds.add(r.clientId);
-            for (const [k, c] of clients) {
-                if (!activeClientIds.has(c.clientId)) clients.delete(k);
-            }
+            // Registered clients are NOT evicted here: AI clients cache their
+            // client_id indefinitely and retry it after token expiry, so
+            // dropping a registration means "Unknown client" until the user
+            // deletes and re-adds the connector (issue #13). The clients map
+            // is bounded at registration time instead.
         },
 
         async loadTokens(): Promise<boolean> {
