@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2
+
+### Fixes
+- OAuth client registrations are no longer evicted when their tokens expire (#13). AI clients cache their `client_id` and present it again after the 14-day refresh-token expiry; the periodic cleanup used to delete the registration in the meantime, leaving the client permanently stuck on "Unknown client" until the connector was deleted and re-added. Registrations now live until the 100-client cap is reached, at which point the oldest registration without live tokens is evicted at registration time.
+- Auth state (clients + tokens) is persisted to disk immediately after registration, code exchange, and refresh rotation instead of only on the 5-minute timer, so a restart or Fly suspend can no longer lose a fresh registration.
+- The 401 from `/mcp` now includes the RFC 9728 `WWW-Authenticate: Bearer resource_metadata="..."` header, so strict clients can discover the authorization server (noted in #12). Claude probes `/.well-known` directly and was unaffected.
+- Bump transitive deps via `npm audit fix` to clear high-severity advisories (`fast-uri`, `ip-address`, `undici`).
+
 ## 0.6.1
 
 ### Changes
